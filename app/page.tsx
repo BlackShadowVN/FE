@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowRight } from "lucide-react"
 import { BannerCarousel } from "./components/BannerCarousel"
+import { FadeInView, TextFX, BatchFadeIn } from "@/components/animation"
 
 // Fallback data for when the API fails
 const FALLBACK_CATEGORIES = [
@@ -195,16 +196,22 @@ function FeaturedProducts({ products }: { products: any[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <BatchFadeIn 
+      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+      stagger={0.03}
+      duration={0.5}
+      distance={30}
+      direction="up"
+    >
       {products.map((product) => (
-        <Card key={product.id} className="h-full flex flex-col">
+        <Card key={product.id} className="h-full flex flex-col hover:shadow-md transition-shadow">
           <CardHeader className="p-0">
-            <div className="relative h-48 w-full">
+            <div className="relative h-48 w-full overflow-hidden group">
               <Image
                 src={product.main_image || "/placeholder.svg"}
                 alt={product.name}
                 fill
-                className="object-cover rounded-t-lg"
+                className="object-cover rounded-t-lg transition-transform duration-500 group-hover:scale-105"
               />
             </div>
           </CardHeader>
@@ -226,35 +233,49 @@ function FeaturedProducts({ products }: { products: any[] }) {
           </CardFooter>
         </Card>
       ))}
-    </div>
+    </BatchFadeIn>
   )
 }
 
 function CategoryGrid({ categories }: { categories: any[] }) {
-  if (!categories.length) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Không có danh mục</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <BatchFadeIn 
+      className="grid grid-cols-2 md:grid-cols-4 gap-4"
+      stagger={0.03}
+      duration={0.5}
+      distance={30}
+      direction="up"
+    >
       {categories.map((category) => (
         <Link key={category.id} href={`/products?category=${category.id}`}>
-          <Card className="h-full hover:border-primary transition-colors">
-            <CardContent className="p-6 flex flex-col items-center justify-center space-y-2 text-center">
-              <div className="bg-primary/10 p-3 rounded-full">
-                <div className="w-8 h-8 flex items-center justify-center text-primary">{category.id.charAt(0)}</div>
+          <Card className="h-full hover:shadow-md transition-shadow cursor-pointer group">
+            <CardContent className="p-6 flex flex-col items-center justify-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <svg
+                  className="w-6 h-6 text-primary"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                  <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+                </svg>
               </div>
-              <h3 className="font-medium">{category.name}</h3>
-              <p className="text-xs text-muted-foreground">{category.total_products} sản phẩm</p>
+              <div className="text-center">
+                <h3 className="font-medium">{category.name}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{category.total_products} sản phẩm</p>
+              </div>
             </CardContent>
           </Card>
         </Link>
       ))}
-    </div>
+    </BatchFadeIn>
   )
 }
 
@@ -266,110 +287,63 @@ async function BannerSection() {
 
 async function CategoriesSection() {
   const categories = await getCategories()
-  return (
-    <>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
-        <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-          Xem tất cả <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-      <CategoryGrid categories={categories} />
-    </>
-  )
+  return <CategoryGrid categories={categories} />
 }
 
 async function FeaturedProductsSection() {
   const products = await getFeaturedProducts()
-  return (
-    <>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Sản phẩm nổi bật</h2>
-        <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-          Xem tất cả <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-      <FeaturedProducts products={products} />
-    </>
-  )
+  return <FeaturedProducts products={products} />
 }
 
 export default function Home() {
   return (
-    <div className="container py-8 space-y-12">
-      {/* Banner Section */}
-      <section>
-        <Suspense fallback={<BannerSkeleton />}>
-          <BannerSection />
-        </Suspense>
-      </section>
+    <div className="container px-4 py-8 md:py-12 mx-auto">
+      <Suspense fallback={<BannerSkeleton />}>
+        <BannerSection />
+      </Suspense>
 
-      {/* Categories Section */}
-      <section>
-        <Suspense
-          fallback={
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
-                <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-                  Xem tất cả <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {Array(6)
-                  .fill(0)
-                  .map((_, i) => (
-                    <CategorySkeleton key={i} />
-                  ))}
-              </div>
-            </>
-          }
-        >
+      <section className="mt-8 md:mt-16">
+        <div className="flex items-center justify-between mb-6">
+          <TextFX 
+            as="h2" 
+            effect="words" 
+            className="text-2xl md:text-3xl font-bold" 
+            disableOnMobile={true} // Tắt animation trên mobile
+          >
+            Danh mục sản phẩm
+          </TextFX>
+          <Link
+            href="/products"
+            className="flex items-center text-sm text-primary hover:underline group"
+          >
+            Tất cả danh mục<ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+        <Suspense fallback={<div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <CategorySkeleton key={i} />)}</div>}>
           <CategoriesSection />
         </Suspense>
       </section>
 
-      {/* Featured Products Section */}
-      <section>
-        <Suspense
-          fallback={
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">Sản phẩm nổi bật</h2>
-                <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-                  Xem tất cả <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {Array(8)
-                  .fill(0)
-                  .map((_, i) => (
-                    <ProductSkeleton key={i} />
-                  ))}
-              </div>
-            </>
-          }
-        >
+      <section className="mt-12 md:mt-24">
+        <div className="flex items-center justify-between mb-6">
+          <TextFX 
+            as="h2" 
+            effect="words"
+            className="text-2xl md:text-3xl font-bold"
+            disableOnMobile={true} // Tắt animation trên mobile
+          >
+            Sản phẩm nổi bật
+          </TextFX>
+          <Link
+            href="/products"
+            className="flex items-center text-sm text-primary hover:underline group"
+          >
+            Xem tất cả<ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+        <Suspense fallback={<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{[...Array(8)].map((_, i) => <ProductSkeleton key={i} />)}</div>}>
           <FeaturedProductsSection />
         </Suspense>
-      </section>
-
-      {/* Promotion Section */}
-      <section className="bg-primary/10 rounded-lg p-8 md:p-12">
-        <div className="grid md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-4">
-            <h2 className="text-3xl font-bold">Ưu đãi đặc biệt</h2>
-            <p className="text-muted-foreground">
-              Khám phá các ưu đãi và khuyến mãi độc quyền của chúng tôi. Ưu đãi có thời hạn cho các sản phẩm được chọn.
-            </p>
-            <Button size="lg" asChild>
-              <Link href="/products?special=true">Mua ngay</Link>
-            </Button>
-          </div>
-          <div className="relative h-[200px] md:h-[300px] rounded-lg overflow-hidden">
-            <Image src="/placeholder.svg?height=300&width=500" alt="Ưu đãi đặc biệt" fill className="object-cover" />
-          </div>
-        </div>
       </section>
     </div>
   )

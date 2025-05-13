@@ -1,89 +1,106 @@
-import { Suspense } from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent } from "@/components/ui/card"
 import ProductDetailView from "@/components/product-detail-view"
 import { ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import Image from "next/image"
+import Link from "next/link"
+import { Suspense } from "react"
 
-// Update to use the new API endpoint for product details
+// ErrorFallback component
+function ErrorFallback() {
+  return (
+    <div className="container py-8 text-center">
+      <h2 className="text-2xl font-bold mb-4">Không thể tải thông tin sản phẩm</h2>
+      <p className="text-muted-foreground mb-6">Đã xảy ra lỗi khi tải thông tin sản phẩm. Vui lòng thử lại sau.</p>
+      <Button asChild>
+        <Link href="/products">Quay lại danh sách sản phẩm</Link>
+      </Button>
+    </div>
+  );
+}
+
+// API fetch functions
 async function getProduct(id: string) {
   try {
-    // Use the new API endpoint that provides detailed product information
+    if (!id) {
+      console.error("Invalid product ID");
+      return null;
+    }
+
     const res = await fetch(`https://thanhbinhnguyen.id.vn/restful/products/${id}`, {
-      // Lấy dữ liệu mới khi reload nhưng vẫn cache nếu page không reload
-      cache: "no-store",
-      next: { revalidate: 3600 }, // Vẫn tự động cập nhật sau 1 giờ
+      next: { revalidate: 3600 },
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-    })
+    });
 
     if (!res.ok) {
-      console.error("Failed to fetch product:", res.status, res.statusText)
-      return null
+      console.error("Failed to fetch product:", res.status, res.statusText);
+      return null;
     }
 
-    const text = await res.text()
+    const text = await res.text();
 
     try {
-      const data = JSON.parse(text)
-      return data.status === "success" ? data.data : null
+      const data = JSON.parse(text);
+      return data.status === "success" ? data.data : null;
     } catch (parseError) {
-      console.error("Error parsing product JSON:", parseError, "Response text:", text.substring(0, 100))
-      return null
+      console.error("Error parsing product JSON:", parseError, "Response text:", text.substring(0, 100));
+      return null;
     }
   } catch (error) {
-    console.error("Error fetching product:", error)
-    return null
+    console.error("Error fetching product:", error);
+    return null;
   }
 }
 
-// Get related products by category
 async function getRelatedProducts(categoryId: string, currentProductId: string) {
   try {
+    if (!categoryId || !currentProductId) {
+      console.error("Invalid category ID or product ID");
+      return [];
+    }
+
     const res = await fetch(`https://thanhbinhnguyen.id.vn/restful/products?page=1&limit=9999`, {
-      // Lấy dữ liệu mới khi reload nhưng vẫn cache nếu page không reload
-      cache: "no-store",
-      next: { revalidate: 3600 }, // Vẫn tự động cập nhật sau 1 giờ
+      next: { revalidate: 3600 },
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-    })
+    });
 
     if (!res.ok) {
-      console.error("Failed to fetch related products:", res.status, res.statusText)
-      return []
+      console.error("Failed to fetch related products:", res.status, res.statusText);
+      return [];
     }
 
-    const text = await res.text()
+    const text = await res.text();
 
     try {
-      const data = JSON.parse(text)
+      const data = JSON.parse(text);
 
       if (data.status === "success") {
         return data.data.products
           .filter(
             (p: any) => p.category_id.toString() === categoryId.toString() && p.id.toString() !== currentProductId,
           )
-          .slice(0, 4)
+          .slice(0, 4);
       }
 
-      return []
+      return [];
     } catch (parseError) {
-      console.error("Error parsing related products JSON:", parseError, "Response text:", text.substring(0, 100))
-      return []
+      console.error("Error parsing related products JSON:", parseError, "Response text:", text.substring(0, 100));
+      return [];
     }
   } catch (error) {
-    console.error("Error fetching related products:", error)
-    return []
+    console.error("Error fetching related products:", error);
+    return [];
   }
 }
 
+// Skeleton components 
 function ProductSkeleton() {
   return (
     <div className="container py-8">
@@ -144,63 +161,12 @@ function RelatedProductsSkeleton() {
   )
 }
 
-function RelatedProducts({ products }: { products: any[] }) {
-  if (!products.length) {
-    return null
-  }
-
-  return (
-    <div className="container py-8 space-y-6">
-      <h2 className="text-2xl font-bold">Sản phẩm liên quan</h2>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-        {products.map((product) => (
-          <Card key={product.id} className="h-full">
-            <div className="relative h-40 w-full">
-              <Image
-                src={product.main_image || "/placeholder.svg"}
-                alt={product.name}
-                fill
-                className="object-cover rounded-t-lg"
-              />
-            </div>
-            <CardContent className="p-4">
-              <h3 className="font-medium line-clamp-1">{product.name}</h3>
-              <p className="text-primary font-bold mt-1">
-                {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
-                  Number.parseFloat(product.base_price),
-                )}
-              </p>
-              <Button variant="outline" className="w-full mt-3" asChild>
-                <Link href={`/products/${product.id}`}>Xem chi tiết</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-export default function ProductPage({ params }: { params: { id: string } }) {
-  return (
-    <>
-      <Suspense fallback={<ProductSkeleton />}>
-        <ProductDetailsLoader id={params.id} />
-      </Suspense>
-
-      <Suspense fallback={<RelatedProductsSkeleton />}>
-        <RelatedProductsLoader id={params.id} />
-      </Suspense>
-    </>
-  )
-}
-
-async function ProductDetailsLoader({ id }: { id: string }) {
-  const product = await getProduct(id)
+// Server components for product display
+async function ProductDetails({ id }: { id: string }) {
+  const product = await getProduct(id);
 
   if (!product) {
-    notFound()
+    return <ErrorFallback />;
   }
 
   return (
@@ -212,18 +178,74 @@ async function ProductDetailsLoader({ id }: { id: string }) {
         </Link>
       </div>
 
-      <ProductDetailView product={product} />
+      <div className="product-view">
+        <ProductDetailView product={product} />
+      </div>
     </div>
-  )
+  );
 }
 
-async function RelatedProductsLoader({ id }: { id: string }) {
-  const product = await getProduct(id)
+async function RelatedProducts({ id }: { id: string }) {
+  const product = await getProduct(id);
 
   if (!product) {
-    return null
+    return null;
   }
 
-  const relatedProducts = await getRelatedProducts(product.category_id, id)
-  return <RelatedProducts products={relatedProducts} />
+  const relatedProducts = await getRelatedProducts(product.category_id, id);
+
+  if (!relatedProducts.length) {
+    return null;
+  }
+
+  return (
+    <div className="container py-8 space-y-6">
+      <h2 className="text-2xl font-bold">Sản phẩm liên quan</h2>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+        {relatedProducts.map((product: any) => (
+          <Card key={product.id} className="h-full product-card overflow-hidden transition-all">
+            <div className="relative h-40 w-full overflow-hidden">
+              <Image
+                src={product.main_image || "/placeholder.svg"}
+                alt={product.name}
+                fill
+                className="object-cover rounded-t-lg transition-transform duration-500"
+              />
+            </div>
+            <CardContent className="p-4">
+              <h3 className="font-medium line-clamp-1">{product.name}</h3>
+              <p className="text-primary font-bold mt-1">
+                {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
+                  Number.parseFloat(product.base_price),
+                )}
+              </p>
+              <Button 
+                variant="outline" 
+                className="w-full mt-3 hover:bg-primary hover:text-primary-foreground transition-colors" 
+                asChild
+              >
+                <Link href={`/products/${product.id}`}>Xem chi tiết</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Trang chính - server component
+export default async function ProductPage({ params }: { params: { id: string } }) {
+  return (
+    <>
+      <Suspense fallback={<ProductSkeleton />}>
+        <ProductDetails id={params.id} />
+      </Suspense>
+
+      <Suspense fallback={<RelatedProductsSkeleton />}>
+        <RelatedProducts id={params.id} />
+      </Suspense>
+    </>
+  );
 }

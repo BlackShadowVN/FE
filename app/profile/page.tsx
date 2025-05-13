@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { z } from "zod"
@@ -9,6 +9,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import Avatar from 'react-avatar'
 
 import { useAuth } from "@/components/auth-provider"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,10 +30,15 @@ import {
   LogOut,
   ChevronRight,
   RefreshCw,
-  XCircle
+  XCircle,
+  Home,
+  Bell,
+  Settings,
+  HelpCircle,
+  Calendar
 } from "lucide-react"
 
-// Định nghĩa schema xác thực cho form cập nhật thông tin
+// Schema definition
 const profileFormSchema = z.object({
   fullname: z.string().min(2, { message: "Họ tên phải có ít nhất 2 ký tự" }),
   email: z.string().email({ message: "Email không hợp lệ" }),
@@ -39,7 +46,6 @@ const profileFormSchema = z.object({
   address: z.string().optional(),
 })
 
-// Định nghĩa schema xác thực cho form đổi mật khẩu
 const passwordFormSchema = z.object({
   currentPassword: z.string().min(6, { message: "Mật khẩu hiện tại phải có ít nhất 6 ký tự" }),
   newPassword: z.string().min(6, { message: "Mật khẩu mới phải có ít nhất 6 ký tự" }),
@@ -49,7 +55,15 @@ const passwordFormSchema = z.object({
   path: ["confirmPassword"],
 })
 
-// Interface cho đơn hàng
+// Navigation menu item type
+interface MenuItem {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  description?: string;
+}
+
+// Order interface
 interface Order {
   id: number
   order_code: string
@@ -63,7 +77,7 @@ interface Order {
   updated_at: string
 }
 
-// Hàm chuyển đổi trạng thái đơn hàng sang tiếng Việt
+// Helper functions
 const translateOrderStatus = (status: string) => {
   const statusMap: Record<string, string> = {
     'pending': 'Chờ xác nhận',
@@ -75,7 +89,6 @@ const translateOrderStatus = (status: string) => {
   return statusMap[status] || status
 }
 
-// Lấy màu cho badge trạng thái
 const getStatusBadgeVariant = (status: string) => {
   const variantMap: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     'pending': 'outline',
@@ -91,12 +104,189 @@ export default function ProfilePage() {
   const { user, isAuthenticated, token, updateUserInfo, logout } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { gsap } = useGSAP()
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const [orders, setOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
 
-  // Khởi tạo form cập nhật thông tin
+  // Refs for animation
+  const profileHeaderRef = useRef<HTMLDivElement>(null)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const profileFormRef = useRef<HTMLFormElement>(null)
+  const passwordFormRef = useRef<HTMLFormElement>(null)
+  const ordersListRef = useRef<HTMLDivElement>(null)
+  const submitBtnRef = useRef<HTMLButtonElement>(null)
+
+  // Navigation menu
+  const menuItems: MenuItem[] = [
+    {
+      label: "Thông tin cá nhân",
+      value: "profile",
+      icon: <UserRound className="h-4 w-4" />,
+      description: "Cập nhật thông tin cá nhân của bạn"
+    },
+    {
+      label: "Bảo mật",
+      value: "password",
+      icon: <KeyRound className="h-4 w-4" />,
+      description: "Cập nhật mật khẩu để bảo vệ tài khoản"
+    },
+    {
+      label: "Đơn hàng",
+      value: "orders",
+      icon: <ShoppingBag className="h-4 w-4" />,
+      description: "Xem và quản lý đơn hàng của bạn"
+    }
+  ]
+
+  // Animations for UI components
+  useIsomorphicLayoutEffect(() => {
+    if (!isAuthenticated) return;
+    
+    // Kiểm tra nếu đang trên thiết bị di động để tối ưu hiệu suất
+    const isMobile = window.innerWidth < 768;
+    
+    // Giảm stagger và duration trên mobile để tối ưu hiệu suất
+    const staggerTime = isMobile ? 0.03 : 0.05;
+    const animDuration = isMobile ? 0.3 : 0.4;
+    
+    // Timeline for animations
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        defaults: {
+          ease: "power2.out",
+          duration: animDuration,
+          clearProps: "transform" // Giải phóng bộ nhớ sau khi animation hoàn thành
+        }
+      });
+      
+      // Header animation
+      if (profileHeaderRef.current) {
+        tl.fromTo(
+          profileHeaderRef.current,
+          { y: -20, opacity: 0 },
+          { y: 0, opacity: 1 }
+        );
+      }
+      
+      // Sidebar animation
+      if (sidebarRef.current) {
+        const menuItems = sidebarRef.current.querySelectorAll('.menu-item');
+        tl.fromTo(
+          menuItems,
+          { x: -20, opacity: 0 },
+          { x: 0, opacity: 1, stagger: staggerTime },
+          "-=0.2"
+        );
+      }
+      
+      // Content animation
+      if (contentRef.current) {
+        tl.fromTo(
+          contentRef.current,
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0 },
+          "-=0.2"
+        );
+      }
+    });
+    
+    // Cleanup function
+    return () => ctx.revert();
+  }, [isAuthenticated, gsap]);
+
+  // Animate tab content when active tab changes
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    // Tạo context GSAP để theo dõi và hủy tất cả animations khi unmount
+    const ctx = gsap.context(() => {
+      // Kiểm tra nếu đang trên thiết bị di động để tối ưu hiệu suất
+      const isMobile = window.innerWidth < 768;
+      const duration = isMobile ? 0.3 : 0.4;
+      const staggerTime = isMobile ? 0.03 : 0.07;
+      
+      // Đặt timeout để đảm bảo DOM đã cập nhật trước khi chạy animation
+      setTimeout(() => {
+        animateTabContent();
+        
+        // Animation cho button
+        if (submitBtnRef.current) {
+          gsap.fromTo(
+            submitBtnRef.current,
+            { scale: 0.95, opacity: 0 },
+            { 
+              scale: 1, 
+              opacity: 1, 
+              duration: duration, 
+              ease: "back.out(1.7)",
+              clearProps: "transform" // Giải phóng bộ nhớ sau khi animation hoàn thành
+            }
+          );
+        }
+      }, 50);
+    });
+    
+    // Cleanup function
+    return () => ctx.revert();
+  }, [activeTab, isAuthenticated, gsap]);
+
+  // Function to handle tab animation
+  const animateTabContent = () => {
+    // Kiểm tra nếu đang trên thiết bị di động để tối ưu hiệu suất
+    const isMobile = window.innerWidth < 768;
+    const duration = isMobile ? 0.3 : 0.4;
+    const staggerTime = isMobile ? 0.03 : 0.07;
+    
+    if (activeTab === 'profile' && profileFormRef.current) {
+      const formElements = profileFormRef.current.querySelectorAll('.animate-item');
+      gsap.fromTo(
+        formElements,
+        { x: -30, opacity: 0 },
+        { 
+          x: 0, 
+          opacity: 1, 
+          duration: duration, 
+          stagger: staggerTime,
+          ease: "power2.out",
+          clearProps: "transform" 
+        }
+      );
+    } else if (activeTab === 'password' && passwordFormRef.current) {
+      const formElements = passwordFormRef.current.querySelectorAll('.animate-item');
+      gsap.fromTo(
+        formElements,
+        { x: -30, opacity: 0 },
+        { 
+          x: 0, 
+          opacity: 1, 
+          duration: duration, 
+          stagger: staggerTime,
+          ease: "power2.out",
+          clearProps: "transform"
+        }
+      );
+    } else if (activeTab === 'orders' && ordersListRef.current) {
+      const orderItems = ordersListRef.current.querySelectorAll('.order-item');
+      gsap.fromTo(
+        orderItems,
+        { y: 20, opacity: 0 },
+        { 
+          y: 0, 
+          opacity: 1, 
+          duration: duration, 
+          stagger: staggerTime,
+          ease: "power2.out",
+          clearProps: "transform" 
+        }
+      );
+    }
+  };
+
+  // Form initialization
   const profileForm = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
@@ -107,7 +297,6 @@ export default function ProfilePage() {
     },
   })
 
-  // Khởi tạo form đổi mật khẩu
   const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
     resolver: zodResolver(passwordFormSchema),
     defaultValues: {
@@ -117,7 +306,7 @@ export default function ProfilePage() {
     },
   })
 
-  // Cập nhật giá trị mặc định khi user thay đổi
+  // Update default values when user changes
   useEffect(() => {
     if (user) {
       profileForm.reset({
@@ -129,24 +318,26 @@ export default function ProfilePage() {
     }
   }, [user, profileForm])
 
-  // Chuyển hướng nếu chưa đăng nhập
+  // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated && user === null) {
       router.push("/login")
     }
   }, [isAuthenticated, user, router])
 
-  // Lấy danh sách đơn hàng
+  // Get order list
   useEffect(() => {
     const fetchOrders = async () => {
       if (!user || !token) return
 
       try {
         setLoadingOrders(true)
-        // Tạo URL với query params
+        // Create URL with query params
         const url = new URL(`https://thanhbinhnguyen.id.vn/restful/orders`);
         url.searchParams.append('user_id', user.id.toString());
-        url.searchParams.append('limit', '5'); // Chỉ lấy 5 đơn hàng gần nhất
+        url.searchParams.append('limit', '8'); // Hiển thị 8 đơn hàng gần nhất
+        url.searchParams.append('order_by', 'created_at'); // Sắp xếp theo thời gian tạo
+        url.searchParams.append('sort', 'desc'); // Sắp xếp giảm dần (mới nhất trước)
 
         const response = await fetch(url.toString(), {
           headers: {
@@ -159,11 +350,11 @@ export default function ProfilePage() {
         const data = await response.json()
 
         if (data.status === "success") {
-          // Lấy dữ liệu phù hợp với cấu trúc API
+          // Get data that matches API structure
           const orders = Array.isArray(data.data) ? data.data : (data.data?.orders || []);
           setOrders(orders)
         } else {
-          console.error("Không thể tải đơn hàng", data.message)
+          console.error("Cannot load orders", data.message)
         }
       } catch (error) {
         console.error("Fetch orders error:", error)
@@ -177,9 +368,24 @@ export default function ProfilePage() {
     }
   }, [user, token, isAuthenticated, activeTab])
 
-  // Xử lý cập nhật thông tin
+  // Handle profile update
   const onUpdateProfile = async (data: z.infer<typeof profileFormSchema>) => {
     if (!user || !token) return
+
+    // Add animation for submit button
+    if (submitBtnRef.current) {
+      gsap.to(submitBtnRef.current, {
+        scale: 0.95,
+        duration: 0.1,
+        onComplete: () => {
+          gsap.to(submitBtnRef.current, {
+            scale: 1,
+            duration: 0.3,
+            ease: "elastic.out(1, 0.3)"
+          })
+        }
+      })
+    }
 
     setIsLoading(true)
 
@@ -201,25 +407,25 @@ export default function ProfilePage() {
       const result = await response.json()
 
       if (result.status === "success") {
-        // Cập nhật thông tin người dùng trong AuthProvider
+        // Update user info in AuthProvider
         updateUserInfo(data.fullname, data.email, data.phone, data.address)
         
         toast({
-          title: "Cập nhật thành công",
-          description: "Thông tin cá nhân của bạn đã được cập nhật",
+          title: "Update successful",
+          description: "Your personal information has been updated",
         })
       } else {
         toast({
-          title: "Cập nhật thất bại",
-          description: result.message || "Đã xảy ra lỗi khi cập nhật thông tin",
+          title: "Update failed",
+          description: result.message || "An error occurred while updating information",
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Update profile error:", error)
       toast({
-        title: "Cập nhật thất bại",
-        description: "Đã xảy ra lỗi khi cập nhật thông tin. Vui lòng thử lại sau.",
+        title: "Update failed",
+        description: "An error occurred while updating information. Please try again later.",
         variant: "destructive",
       })
     } finally {
@@ -227,9 +433,34 @@ export default function ProfilePage() {
     }
   }
 
-  // Xử lý đổi mật khẩu
+  // Handle password change
   const onChangePassword = async (data: z.infer<typeof passwordFormSchema>) => {
     if (!user || !token) return
+
+    // If confirm password does not match
+    if (data.newPassword !== data.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Confirm password does not match new password",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Add animation for form when submit
+    if (passwordFormRef.current) {
+      gsap.to(passwordFormRef.current, {
+        scale: 0.99,
+        duration: 0.1,
+        onComplete: () => {
+          gsap.to(passwordFormRef.current, {
+            scale: 1,
+            duration: 0.3,
+            ease: "power2.out"
+          })
+        }
+      })
+    }
 
     setIsLoading(true)
 
@@ -251,22 +482,22 @@ export default function ProfilePage() {
 
       if (result.status === "success") {
         toast({
-          title: "Đổi mật khẩu thành công",
-          description: "Mật khẩu của bạn đã được cập nhật",
+          title: "Password changed successfully",
+          description: "Your password has been updated",
         })
         passwordForm.reset()
       } else {
         toast({
-          title: "Đổi mật khẩu thất bại",
-          description: result.message || "Đã xảy ra lỗi khi đổi mật khẩu",
+          title: "Password change failed",
+          description: result.message || "An error occurred while changing password",
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Change password error:", error)
       toast({
-        title: "Đổi mật khẩu thất bại",
-        description: "Đã xảy ra lỗi khi đổi mật khẩu. Vui lòng thử lại sau.",
+        title: "Password change failed",
+        description: "An error occurred while changing password. Please try again later.",
         variant: "destructive",
       })
     } finally {
@@ -274,13 +505,13 @@ export default function ProfilePage() {
     }
   }
 
-  // Xử lý đăng xuất và chuyển hướng về trang chủ
+  // Handle logout and redirect to home page
   const handleLogout = () => {
     logout()
     router.push("/")
   }
 
-  // Xử lý hủy đơn hàng
+  // Handle order cancellation
   const cancelOrder = async (orderId: number) => {
     if (!user || !token) return
 
@@ -299,7 +530,7 @@ export default function ProfilePage() {
       const data = await response.json()
 
       if (data.status === "success") {
-        // Cập nhật trạng thái đơn hàng trong state
+        // Update order status in state
         setOrders(prevOrders => 
           prevOrders.map(order => 
             order.id === orderId ? { ...order, status: 'cancelled' } : order
@@ -307,112 +538,85 @@ export default function ProfilePage() {
         )
 
         toast({
-          title: "Hủy đơn hàng thành công",
-          description: "Đơn hàng của bạn đã được hủy",
+          title: "Order cancellation successful",
+          description: "Your order has been cancelled",
         })
       } else {
         toast({
-          title: "Hủy đơn hàng thất bại",
-          description: data.message || "Không thể hủy đơn hàng này",
+          title: "Order cancellation failed",
+          description: data.message || "Cannot cancel this order",
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Cancel order error:", error)
       toast({
-        title: "Hủy đơn hàng thất bại",
-        description: "Đã xảy ra lỗi khi hủy đơn hàng. Vui lòng thử lại sau.",
+        title: "Order cancellation failed",
+        description: "An error occurred while cancelling order. Please try again later.",
         variant: "destructive",
       })
     }
   }
 
+  // Function to handle tab animation
+  const animateTab = (tab: string) => {
+    setActiveTab(tab);
+    
+    // Use setTimeout to wait for UI to render before running animation
+    setTimeout(() => {
+      animateTabContent();
+    }, 50);
+  }
+
   if (!isAuthenticated) {
-    return null // Sẽ chuyển hướng bởi useEffect
+    return null // Will redirect by useEffect
   }
 
   return (
-    <div className="container py-10">
-      <h1 className="text-3xl font-bold mb-6">Tài khoản của tôi</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-6">
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex flex-col items-center space-y-4">
-                <div>
-                  <Avatar 
-                    name={user?.fullname}
-                    size="80"
-                    round={true}
-                  />
-                </div>
-                <div className="text-center">
-                  <h2 className="font-medium text-lg">{user?.fullname}</h2>
-                  <p className="text-sm text-muted-foreground">{user?.email}</p>
-                  {user?.phone && (
-                    <p className="text-sm text-muted-foreground mt-1">{user.phone}</p>
-                  )}
-                  {user?.role === "admin" && (
-                    <Badge variant="default" className="mt-2 bg-[#000080] hover:bg-[#000080]/90">Admin</Badge>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+    <div className="container py-8">
+      {/* Page header */}
+      <div ref={profileHeaderRef} className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Tài khoản của bạn</h1>
+        <p className="text-muted-foreground">
+          Quản lý thông tin cá nhân, bảo mật và đơn hàng của bạn
+        </p>
+        <Separator className="mt-6" />
+      </div>
 
-          <div className="space-y-2">
-            <Button 
-              variant={activeTab === "profile" ? "default" : "ghost"} 
-              className="w-full justify-start" 
-              onClick={() => setActiveTab("profile")}
-            >
-              <div className="flex items-center space-x-2">
-                <User className="h-4 w-4" />
-                <span>Thông tin cá nhân</span>
-              </div>
-            </Button>
-            <Button 
-              variant={activeTab === "orders" ? "default" : "ghost"} 
-              className="w-full justify-start" 
-              onClick={() => setActiveTab("orders")}
-            >
-              <div className="flex items-center space-x-2">
-                <ShoppingBag className="h-4 w-4" />
-                <span>Đơn hàng của tôi</span>
-              </div>
-            </Button>
-            <Button 
-              variant={activeTab === "security" ? "default" : "ghost"} 
-              className="w-full justify-start" 
-              onClick={() => setActiveTab("security")}
-            >
-              <div className="flex items-center space-x-2">
-                <KeyRound className="h-4 w-4" />
-                <span>Đổi mật khẩu</span>
-              </div>
-            </Button>
-
-            <Separator className="my-2" />
-
+      {/* Main content with sidebar layout */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Left sidebar */}
+        <div className="md:col-span-1">
+          <div ref={sidebarRef} className="space-y-1 sticky top-6">
+            {menuItems.map((item) => (
+              <Button
+                key={item.value}
+                variant={activeTab === item.value ? "default" : "ghost"}
+                className={`w-full justify-start text-left mb-1 menu-item ${
+                  activeTab === item.value ? "bg-primary text-primary-foreground" : ""
+                }`}
+                onClick={() => animateTab(item.value)}
+              >
+                {item.icon}
+                <span className="ml-3">{item.label}</span>
+              </Button>
+            ))}
+            <Separator className="my-4" />
             <Button 
               variant="ghost" 
-              className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50" 
+              className="w-full justify-start text-left text-destructive hover:text-destructive hover:bg-destructive/10 menu-item"
               onClick={handleLogout}
             >
-              <div className="flex items-center space-x-2">
-                <LogOut className="h-4 w-4" />
-                <span>Đăng xuất</span>
-              </div>
+              <LogOut className="h-4 w-4 mr-3" />
+              Đăng xuất
             </Button>
           </div>
         </div>
 
-        {/* Main Content */}
-        <Card>
+        {/* Right content */}
+        <div ref={contentRef} className="md:col-span-3">
           {activeTab === "profile" && (
-            <div>
+            <Card>
               <CardHeader>
                 <CardTitle>Thông tin cá nhân</CardTitle>
                 <CardDescription>
@@ -420,246 +624,303 @@ export default function ProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col items-center mb-6">
-                  <div className="mb-3">
-                    <Avatar 
-                      name={profileForm.watch('fullname') || user?.fullname}
-                      size="100"
-                      round={true}
-                    />
-                  </div>
-                  <div className="text-sm text-muted-foreground mb-6">
-                    Avatar được tạo tự động từ tên của bạn
-                  </div>
-                </div>
                 <Form {...profileForm}>
-                  <form onSubmit={profileForm.handleSubmit(onUpdateProfile)} className="space-y-6">
-                    <FormField
-                      control={profileForm.control}
-                      name="fullname"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Họ và tên</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Nguyễn Văn A" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input placeholder="example@example.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Số điện thoại</FormLabel>
-                          <FormControl>
-                            <Input placeholder="0901234567" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="address"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Địa chỉ</FormLabel>
-                          <FormControl>
-                            <Input placeholder="123 Đường ABC, Quận XYZ, TP. HCM" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Đang cập nhật..." : "Cập nhật thông tin"}
-                    </Button>
+                  <form ref={profileFormRef} onSubmit={profileForm.handleSubmit(onUpdateProfile)} className="space-y-6">
+                    <div className="animate-item flex flex-col md:flex-row gap-6 items-start md:items-center mb-6">
+                      <Avatar 
+                        name={user?.fullname || "User"}
+                        size="80" 
+                        round={true} 
+                        className="border" 
+                      />
+                      <div>
+                        <h3 className="text-lg font-medium">{user?.fullname}</h3>
+                        <p className="text-sm text-muted-foreground">{user?.email}</p>
+                        <p className="text-sm text-muted-foreground">{user?.username}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <FormField
+                        control={profileForm.control}
+                        name="fullname"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Họ và tên</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Nhập họ và tên của bạn"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={profileForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="email"
+                                placeholder="name@example.com"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <FormField
+                        control={profileForm.control}
+                        name="phone"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Số điện thoại</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Nhập số điện thoại của bạn"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={profileForm.control}
+                        name="address"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Địa chỉ</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Nhập địa chỉ của bạn"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="animate-item">
+                      <Button ref={submitBtnRef} type="submit" disabled={isLoading}>
+                        {isLoading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Đang cập nhật
+                          </>
+                        ) : (
+                          "Cập nhật thông tin"
+                        )}
+                      </Button>
+                    </div>
                   </form>
                 </Form>
               </CardContent>
-            </div>
+            </Card>
           )}
 
-          {activeTab === "orders" && (
-            <div>
-              <CardHeader>
-                <CardTitle>Đơn hàng của tôi</CardTitle>
-                <CardDescription>
-                  Xem và quản lý các đơn hàng đã đặt
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {loadingOrders ? (
-                    <div className="flex flex-col items-center justify-center py-10">
-                      <RefreshCw className="h-10 w-10 animate-spin text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">Đang tải đơn hàng...</p>
-                    </div>
-                  ) : orders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <ShoppingBag className="h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-medium mb-2">Bạn chưa có đơn hàng nào</h3>
-                      <p className="text-muted-foreground mb-4">Hãy mua sắm để thấy đơn hàng ở đây</p>
-                      <Button asChild>
-                        <Link href="/products">
-                          Bắt đầu mua sắm
-                        </Link>
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {orders.map(order => (
-                        <Card key={order.id} className="overflow-hidden">
-                          <CardHeader className="pb-2">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <CardTitle className="text-lg">Đơn hàng #{order.id}</CardTitle>
-                                <CardDescription>
-                                  Đặt ngày {new Date(order.created_at).toLocaleDateString('vi-VN')}
-                                </CardDescription>
-                              </div>
-                              <Badge variant={getStatusBadgeVariant(order.status)}>
-                                {translateOrderStatus(order.status)}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pb-2">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <p className="text-sm font-medium mb-1">Địa chỉ giao hàng</p>
-                                <p className="text-sm text-muted-foreground line-clamp-1">{order.shipping_address}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium mb-1">Phương thức thanh toán</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {order.payment_method === 'cod' ? 'Thanh toán khi nhận hàng' : 'Thanh toán qua thẻ'}
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                          <CardFooter className="flex justify-between pt-2 border-t bg-muted/50">
-                            <div className="font-medium">
-                              Tổng tiền: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(parseFloat(order.total_amount?.toString() || order.total_price?.toString() || '0'))}
-                            </div>
-                            <div className="flex space-x-2">
-                              {order.status === 'pending' && (
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => {
-                                    if (window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?")) {
-                                      cancelOrder(order.id)
-                                    }
-                                  }}
-                                >
-                                  <XCircle className="h-4 w-4 mr-1" />
-                                  Hủy
-                                </Button>
-                              )}
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                onClick={() => router.push(`/orders/${order.id}`)}
-                              >
-                                Chi tiết
-                                <ChevronRight className="h-4 w-4 ml-1" />
-                              </Button>
-                            </div>
-                          </CardFooter>
-                        </Card>
-                      ))}
-                      
-                      {orders.length > 0 && (
-                        <div className="text-center pt-2">
-                          <Button 
-                            variant="outline"
-                            onClick={() => router.push('/orders')}
-                          >
-                            Xem tất cả đơn hàng
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </div>
-          )}
-
-          {activeTab === "security" && (
-            <div>
+          {activeTab === "password" && (
+            <Card>
               <CardHeader>
                 <CardTitle>Đổi mật khẩu</CardTitle>
                 <CardDescription>
-                  Đổi mật khẩu đăng nhập của bạn
+                  Cập nhật mật khẩu mới để bảo vệ tài khoản của bạn
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...passwordForm}>
-                  <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-6">
+                  <form ref={passwordFormRef} onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-6">
                     <FormField
                       control={passwordForm.control}
                       name="currentPassword"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="animate-item">
                           <FormLabel>Mật khẩu hiện tại</FormLabel>
                           <FormControl>
-                            <Input type="password" {...field} />
+                            <Input
+                              type="password"
+                              placeholder="••••••••"
+                              {...field}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={passwordForm.control}
-                      name="newPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Mật khẩu mới</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={passwordForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Xác nhận mật khẩu mới</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Đang cập nhật..." : "Đổi mật khẩu"}
-                    </Button>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <FormField
+                        control={passwordForm.control}
+                        name="newPassword"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Mật khẩu mới</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="password"
+                                placeholder="••••••••"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                            <FormDescription>
+                              Mật khẩu phải có ít nhất 6 ký tự
+                            </FormDescription>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={passwordForm.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                          <FormItem className="animate-item">
+                            <FormLabel>Xác nhận mật khẩu mới</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="password"
+                                placeholder="••••••••"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="animate-item">
+                      <Button type="submit" disabled={isLoading}>
+                        {isLoading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Đang xử lý
+                          </>
+                        ) : (
+                          "Đổi mật khẩu"
+                        )}
+                      </Button>
+                    </div>
                   </form>
                 </Form>
               </CardContent>
-            </div>
+            </Card>
           )}
-        </Card>
+
+          {activeTab === "orders" && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Đơn hàng của bạn</CardTitle>
+                  <CardDescription>
+                    Xem và quản lý các đơn hàng của bạn
+                  </CardDescription>
+                </div>
+                <Button variant="outline" asChild size="sm">
+                  <Link href="/orders" className="flex items-center">
+                    <ShoppingBag className="mr-2 h-4 w-4" />
+                    Xem tất cả
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {loadingOrders ? (
+                  <div className="py-8 flex justify-center">
+                    <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : orders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ShoppingBag className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium">Bạn chưa có đơn hàng nào</h3>
+                    <p className="text-sm text-muted-foreground mt-1 mb-4">
+                      Hãy mua sắm để tạo đơn hàng đầu tiên
+                    </p>
+                    <Button asChild>
+                      <Link href="/products">Mua sắm ngay</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div ref={ordersListRef} className="space-y-4">
+                    {orders.map((order) => (
+                      <div key={order.id} className="border rounded-lg p-4 order-item hover:shadow-md transition-shadow">
+                        <div className="flex flex-col space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant={getStatusBadgeVariant(order.status)}>
+                                  {translateOrderStatus(order.status)}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {new Date(order.created_at).toLocaleDateString('vi-VN')}
+                                </span>
+                              </div>
+                              <p className="font-medium">Đơn hàng #{order.id}</p>
+                              <p className="text-sm text-muted-foreground">Mã đơn: {order.order_code}</p>
+                            </div>
+                            <div className="font-medium text-right">
+                              {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
+                                Number(order.total_price || order.total_amount || 0)
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <p className="font-medium mb-1">Địa chỉ giao hàng</p>
+                              <p className="text-muted-foreground">{order.shipping_address}</p>
+                            </div>
+                            <div>
+                              <p className="font-medium mb-1">Phương thức thanh toán</p>
+                              <p className="text-muted-foreground">
+                                {order.payment_method === 'cod' ? 'Thanh toán khi nhận hàng' : 'Thanh toán qua thẻ'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-end gap-3 pt-2">
+                            {order.status === 'pending' && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  if (window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?")) {
+                                    cancelOrder(order.id)
+                                  }
+                                }}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Hủy đơn
+                              </Button>
+                            )}
+                            <Button asChild size="sm">
+                              <Link href={`/orders/${order.id}`}>
+                                Chi tiết
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   )

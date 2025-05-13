@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -17,12 +17,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/components/ui/use-toast"
 import { ArrowLeft, CreditCard, Banknote, ShoppingBag } from "lucide-react"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 
 export default function CheckoutPage() {
   const { cart, totalPrice, clearCart } = useCart()
   const { user, isAuthenticated, token } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { gsap } = useGSAP()
+
+  // Refs cho animation
+  const emptyCartRef = useRef<HTMLDivElement>(null)
+  const checkoutHeaderRef = useRef<HTMLHeadingElement>(null)
+  const formLeftRef = useRef<HTMLDivElement>(null)
+  const orderSummaryRef = useRef<HTMLDivElement>(null)
+  const contactInfoRef = useRef<HTMLDivElement>(null)
+  const shippingInfoRef = useRef<HTMLDivElement>(null)
+  const paymentInfoRef = useRef<HTMLDivElement>(null)
+  const submitBtnRef = useRef<HTMLButtonElement>(null)
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -62,6 +75,113 @@ export default function CheckoutPage() {
       }))
     }
   }, [user])
+  
+  // Animation cho trang checkout
+  useIsomorphicLayoutEffect(() => {
+    // Animation cho trang giỏ hàng trống
+    if (cart.length === 0 && emptyCartRef.current) {
+      const elements = emptyCartRef.current.children;
+      
+      gsap.fromTo(
+        elements, 
+        { y: 30, opacity: 0 }, 
+        { 
+          y: 0, 
+          opacity: 1, 
+          duration: 0.6, 
+          stagger: 0.1, 
+          ease: "power2.out" 
+        }
+      );
+    }
+    
+    // Animation khi có sản phẩm trong giỏ hàng
+    if (cart.length > 0) {
+      // Timeline cho animation
+      const tl = gsap.timeline();
+      
+      // Animation cho tiêu đề
+      if (checkoutHeaderRef.current) {
+        tl.fromTo(
+          checkoutHeaderRef.current,
+          { y: -20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" }
+        );
+      }
+      
+      // Animation cho form bên trái
+      if (formLeftRef.current) {
+        // Animation cho các phần trong form
+        if (contactInfoRef.current) {
+          tl.fromTo(
+            contactInfoRef.current,
+            { x: -30, opacity: 0 },
+            { x: 0, opacity: 1, duration: 0.4, ease: "power2.out" },
+            "-=0.2"
+          );
+        }
+        
+        if (shippingInfoRef.current) {
+          tl.fromTo(
+            shippingInfoRef.current,
+            { x: -30, opacity: 0 },
+            { x: 0, opacity: 1, duration: 0.4, ease: "power2.out" },
+            "-=0.1"
+          );
+        }
+        
+        if (paymentInfoRef.current) {
+          tl.fromTo(
+            paymentInfoRef.current,
+            { x: -30, opacity: 0 },
+            { x: 0, opacity: 1, duration: 0.4, ease: "power2.out" },
+            "-=0.1"
+          );
+        }
+      }
+      
+      // Animation cho phần tóm tắt đơn hàng
+      if (orderSummaryRef.current) {
+        const items = orderSummaryRef.current.querySelectorAll('.order-item');
+        const summary = orderSummaryRef.current.querySelector('.order-summary');
+        
+        tl.fromTo(
+          orderSummaryRef.current,
+          { x: 30, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.5, ease: "power2.out" },
+          "-=0.3"
+        );
+        
+        if (items.length) {
+          tl.fromTo(
+            items,
+            { y: 20, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.3, stagger: 0.1, ease: "power2.out" },
+            "-=0.2"
+          );
+        }
+        
+        if (summary) {
+          tl.fromTo(
+            summary,
+            { y: 20, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" },
+            "-=0.1"
+          );
+        }
+      }
+      
+      // Animation cho nút đặt hàng
+      if (submitBtnRef.current) {
+        tl.fromTo(
+          submitBtnRef.current,
+          { scale: 0.9, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.7)" },
+          "-=0.1"
+        );
+      }
+    }
+  }, [cart.length, gsap]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -94,6 +214,21 @@ export default function CheckoutPage() {
       return
     }
 
+    // Animation cho nút đặt hàng khi click
+    if (submitBtnRef.current) {
+      gsap.to(submitBtnRef.current, {
+        scale: 0.95,
+        duration: 0.1,
+        onComplete: () => {
+          gsap.to(submitBtnRef.current, {
+            scale: 1,
+            duration: 0.3,
+            ease: "elastic.out(1, 0.3)"
+          });
+        }
+      });
+    }
+
     // Tạo địa chỉ giao hàng đầy đủ
     const shippingAddress = `${formData.address}, ${formData.city}, ${formData.province}, ${formData.country}`
 
@@ -124,32 +259,97 @@ export default function CheckoutPage() {
       const data = await response.json()
 
       if (data.status === "success") {
-        toast({
-          title: "Đặt hàng thành công!",
-          description: "Cảm ơn bạn đã mua hàng. Đơn hàng của bạn đã được tiếp nhận.",
-        })
-        clearCart()
-        
-        // Chuyển hướng đến trang chi tiết đơn hàng nếu có id, nếu không thì đến trang danh sách đơn hàng
-        if (data.data && data.data.id) {
-          router.push(`/orders/${data.data.id}`)
+        // Animation khi đặt hàng thành công
+        if (formLeftRef.current && orderSummaryRef.current) {
+          gsap.to([formLeftRef.current, orderSummaryRef.current], {
+            opacity: 0,
+            y: -20,
+            duration: 0.5,
+            stagger: 0.1,
+            onComplete: () => {
+              toast({
+                title: "Đặt hàng thành công!",
+                description: "Cảm ơn bạn đã mua hàng. Đơn hàng của bạn đã được tiếp nhận.",
+              });
+              clearCart();
+              
+              // Chuyển hướng đến trang chi tiết đơn hàng nếu có id, nếu không thì đến trang danh sách đơn hàng
+              if (data.data && data.data.id) {
+                router.push(`/orders/${data.data.id}`);
+              } else {
+                router.push("/orders");
+              }
+            }
+          });
         } else {
-          router.push("/orders")
+          toast({
+            title: "Đặt hàng thành công!",
+            description: "Cảm ơn bạn đã mua hàng. Đơn hàng của bạn đã được tiếp nhận.",
+          });
+          clearCart();
+          
+          // Chuyển hướng đến trang chi tiết đơn hàng nếu có id, nếu không thì đến trang danh sách đơn hàng
+          if (data.data && data.data.id) {
+            router.push(`/orders/${data.data.id}`);
+          } else {
+            router.push("/orders");
+          }
         }
       } else {
-        toast({
-          title: "Đặt hàng thất bại",
-          description: data.message || "Đã có lỗi xảy ra khi đặt hàng",
-          variant: "destructive",
-        })
+        // Animation khi đặt hàng thất bại
+        if (formLeftRef.current) {
+          gsap.fromTo(
+            formLeftRef.current,
+            { x: 0 },
+            { 
+              x: gsap.utils.wrap([-10, 10, -10, 10, 0]), 
+              duration: 0.5, 
+              ease: "power2.inOut",
+              onComplete: () => {
+                toast({
+                  title: "Đặt hàng thất bại",
+                  description: data.message || "Đã có lỗi xảy ra khi đặt hàng",
+                  variant: "destructive",
+                });
+              }
+            }
+          );
+        } else {
+          toast({
+            title: "Đặt hàng thất bại",
+            description: data.message || "Đã có lỗi xảy ra khi đặt hàng",
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       console.error("Order creation error:", error)
-      toast({
-        title: "Đặt hàng thất bại",
-        description: "Đã có lỗi xảy ra khi kết nối với máy chủ. Vui lòng thử lại sau.",
-        variant: "destructive",
-      })
+      
+      // Animation khi đặt hàng thất bại
+      if (formLeftRef.current) {
+        gsap.fromTo(
+          formLeftRef.current,
+          { x: 0 },
+          { 
+            x: gsap.utils.wrap([-10, 10, -10, 10, 0]), 
+            duration: 0.5, 
+            ease: "power2.inOut",
+            onComplete: () => {
+              toast({
+                title: "Đặt hàng thất bại",
+                description: "Đã có lỗi xảy ra khi kết nối với máy chủ. Vui lòng thử lại sau.",
+                variant: "destructive",
+              });
+            }
+          }
+        );
+      } else {
+        toast({
+          title: "Đặt hàng thất bại",
+          description: "Đã có lỗi xảy ra khi kết nối với máy chủ. Vui lòng thử lại sau.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -168,7 +368,7 @@ export default function CheckoutPage() {
 
   if (cart.length === 0) {
     return (
-      <div className="container py-16 text-center">
+      <div ref={emptyCartRef} className="container py-16 text-center">
         <div className="max-w-md mx-auto space-y-6">
           <ShoppingBag className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
           <h1 className="text-2xl font-bold">Giỏ hàng của bạn đang trống</h1>
@@ -190,12 +390,12 @@ export default function CheckoutPage() {
         </Link>
       </div>
 
-      <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
+      <h1 ref={checkoutHeaderRef} className="text-3xl font-bold mb-8">Thanh toán</h1>
 
       <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
+        <div ref={formLeftRef} className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="space-y-4">
+            <div ref={contactInfoRef} className="space-y-4">
               <h2 className="text-xl font-semibold">Thông tin liên hệ</h2>
 
               <div className="space-y-2">
@@ -218,7 +418,7 @@ export default function CheckoutPage() {
 
             <Separator />
 
-            <div className="space-y-4">
+            <div ref={shippingInfoRef} className="space-y-4">
               <h2 className="text-xl font-semibold">Địa chỉ giao hàng</h2>
 
               <div className="space-y-2">
@@ -251,107 +451,98 @@ export default function CheckoutPage() {
                   </Select>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Ghi chú</Label>
+                <Textarea
+                  id="notes"
+                  name="notes"
+                  placeholder="Các ghi chú cho đơn hàng (không bắt buộc)"
+                  value={formData.notes}
+                  onChange={handleChange}
+                />
+              </div>
             </div>
 
             <Separator />
 
-            <div className="space-y-4">
+            <div ref={paymentInfoRef} className="space-y-4">
               <h2 className="text-xl font-semibold">Phương thức thanh toán</h2>
 
               <RadioGroup
                 value={formData.paymentMethod}
                 onValueChange={(value) => handleSelectChange("paymentMethod", value)}
-                className="space-y-3"
+                className="gap-4"
               >
-                <div className="flex items-center space-x-3 rounded-md border p-3">
-                  <RadioGroupItem value="cod" id="cod" />
-                  <Label htmlFor="cod" className="flex items-center gap-2 cursor-pointer">
-                    <Banknote className="h-5 w-5 text-muted-foreground" />
-                    Thanh toán khi nhận hàng (COD)
+                <div className="flex items-center space-x-2 rounded-md border p-3">
+                  <RadioGroupItem value="cod" id="payment-cod" />
+                  <Label htmlFor="payment-cod" className="flex items-center gap-2 cursor-pointer">
+                    <Banknote className="h-5 w-5" />
+                    <div>Thanh toán khi nhận hàng (COD)</div>
                   </Label>
                 </div>
 
-                <div className="flex items-center space-x-3 rounded-md border p-3">
-                  <RadioGroupItem value="card" id="card" />
-                  <Label htmlFor="card" className="flex items-center gap-2 cursor-pointer">
-                    <CreditCard className="h-5 w-5 text-muted-foreground" />
-                    Thanh toán qua thẻ
+                <div className="flex items-center space-x-2 rounded-md border p-3">
+                  <RadioGroupItem value="card" id="payment-card" />
+                  <Label htmlFor="payment-card" className="flex items-center gap-2 cursor-pointer">
+                    <CreditCard className="h-5 w-5" />
+                    <div>Thanh toán thẻ (đang phát triển)</div>
                   </Label>
                 </div>
               </RadioGroup>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Ghi chú đơn hàng (Tùy chọn)</Label>
-              <Textarea
-                id="notes"
-                name="notes"
-                placeholder="Yêu cầu đặc biệt khi giao hàng"
-                value={formData.notes}
-                onChange={handleChange}
-              />
-            </div>
-
-            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+            <Button ref={submitBtnRef} type="submit" size="lg" disabled={isSubmitting}>
               {isSubmitting ? "Đang xử lý..." : "Đặt hàng"}
             </Button>
           </form>
         </div>
 
         <div className="lg:col-span-1">
-          <div className="bg-muted rounded-lg p-6 space-y-4 sticky top-20">
+          <div ref={orderSummaryRef} className="bg-muted rounded-lg p-6 space-y-6">
             <h2 className="font-bold text-lg">Tóm tắt đơn hàng</h2>
 
-            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+            <div className="divide-y">
               {cart.map((item) => (
-                <div key={`${item.id}-${item.variantId}`} className="flex gap-3">
-                  <div className="relative h-16 w-16 rounded-md overflow-hidden flex-shrink-0">
-                    <Image src={item.image || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium line-clamp-1">{item.name}</p>
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>
-                        {item.quantity} ×{" "}
-                        {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(item.price)}
-                      </span>
-                      <span>
-                        {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
-                          item.price * item.quantity,
-                        )}
-                      </span>
+                <div key={`${item.id}-${item.variantId || 0}`} className="py-3 order-item">
+                  <div className="flex gap-3">
+                    <div className="relative h-16 w-16 rounded-md overflow-hidden flex-shrink-0">
+                      <Image src={item.image || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{item.name}</p>
+                      <div className="flex justify-between text-sm mt-1">
+                        <p className="text-muted-foreground">x{item.quantity}</p>
+                        <p>
+                          {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
+                            item.price * item.quantity,
+                          )}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <Separator />
-
-            <div className="space-y-2">
+            <div className="order-summary space-y-2">
               <div className="flex justify-between">
-                <span>Tạm tính</span>
-                <span>
-                  {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(totalPrice)}
-                </span>
+                <span className="text-muted-foreground">Tạm tính</span>
+                <span>{new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(totalPrice)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Phí vận chuyển</span>
+                <span className="text-muted-foreground">Phí vận chuyển</span>
                 <span>Miễn phí</span>
               </div>
-            </div>
-
-            <Separator />
-
-            <div className="flex justify-between font-bold">
-              <span>Tổng cộng</span>
-              <span>
-                {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(totalPrice)}
-              </span>
+              <Separator />
+              <div className="flex justify-between font-bold text-lg">
+                <span>Tổng cộng</span>
+                <span>{new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(totalPrice)}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

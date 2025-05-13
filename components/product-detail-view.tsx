@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { useCart } from "@/components/cart-provider"
 import { useToast } from "@/components/ui/use-toast"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 
 interface ProductVariant {
   id: number
@@ -41,16 +43,42 @@ export default function ProductDetailView({ product }: { product: Product }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const { addToCart } = useCart()
   const { toast } = useToast()
+  const { gsap } = useGSAP()
+  
+  // Refs cho animation
+  const containerRef = useRef<HTMLDivElement>(null)
+  const imageContainerRef = useRef<HTMLDivElement>(null)
+  const detailsRef = useRef<HTMLDivElement>(null)
+  const galleryRef = useRef<HTMLDivElement>(null)
+  const addToCartBtnRef = useRef<HTMLButtonElement>(null)
 
   // Combine product images and variant images for the gallery
   const allImages = [...(product.images?.map((img) => img.image_path) || []), ...(selectedVariant?.images || [])]
 
   const handlePrevImage = () => {
     setCurrentImageIndex((prev) => (prev === 0 ? allImages.length - 1 : prev - 1))
+    
+    // Animation cho chuyển ảnh
+    if (imageContainerRef.current) {
+      gsap.fromTo(
+        imageContainerRef.current,
+        { opacity: 0.7, scale: 0.95 },
+        { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }
+      )
+    }
   }
 
   const handleNextImage = () => {
     setCurrentImageIndex((prev) => (prev === allImages.length - 1 ? 0 : prev + 1))
+    
+    // Animation cho chuyển ảnh
+    if (imageContainerRef.current) {
+      gsap.fromTo(
+        imageContainerRef.current,
+        { opacity: 0.7, scale: 0.95 },
+        { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }
+      )
+    }
   }
 
   const handleAddToCart = () => {
@@ -63,6 +91,21 @@ export default function ProductDetailView({ product }: { product: Product }) {
       variantId: selectedVariant?.id || 0,
     }
 
+    // Animation cho nút thêm vào giỏ hàng
+    if (addToCartBtnRef.current) {
+      gsap.to(addToCartBtnRef.current, {
+        scale: 0.95,
+        duration: 0.1,
+        onComplete: () => {
+          gsap.to(addToCartBtnRef.current, {
+            scale: 1,
+            duration: 0.3,
+            ease: "elastic.out(1, 0.3)"
+          })
+        }
+      })
+    }
+
     addToCart(itemToAdd)
 
     toast({
@@ -70,6 +113,48 @@ export default function ProductDetailView({ product }: { product: Product }) {
       description: `${itemToAdd.name} đã được thêm vào giỏ hàng của bạn.`,
     })
   }
+
+  // Khởi tạo animation
+  useIsomorphicLayoutEffect(() => {
+    if (!containerRef.current) return;
+    
+    // Timeline cho animation
+    const tl = gsap.timeline();
+    
+    // Animation cho hình ảnh sản phẩm
+    if (imageContainerRef.current) {
+      tl.fromTo(
+        imageContainerRef.current, 
+        { x: -50, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.6, ease: "power2.out" }
+      );
+    }
+    
+    // Animation cho gallery hình ảnh
+    if (galleryRef.current) {
+      const thumbnails = galleryRef.current.querySelectorAll('button');
+      if (thumbnails.length) {
+        tl.fromTo(
+          thumbnails,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out" },
+          "-=0.3"
+        );
+      }
+    }
+    
+    // Animation cho thông tin sản phẩm
+    if (detailsRef.current) {
+      const elements = detailsRef.current.children;
+      tl.fromTo(
+        elements,
+        { y: 30, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: "power2.out" },
+        "-=0.4"
+      );
+    }
+    
+  }, [gsap, product.id]);
 
   const price = selectedVariant ? selectedVariant.price : product.base_price
   const formattedPrice = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
@@ -79,10 +164,10 @@ export default function ProductDetailView({ product }: { product: Product }) {
   const isInStock = selectedVariant ? selectedVariant.stock > 0 : true
 
   return (
-    <div className="grid md:grid-cols-2 gap-8">
+    <div ref={containerRef} className="grid md:grid-cols-2 gap-8">
       {/* Product Images */}
       <div className="space-y-4">
-        <div className="relative aspect-square rounded-lg overflow-hidden border">
+        <div ref={imageContainerRef} className="relative aspect-square rounded-lg overflow-hidden border">
           {allImages.length > 0 ? (
             <>
               <Image
@@ -121,7 +206,7 @@ export default function ProductDetailView({ product }: { product: Product }) {
 
         {/* Thumbnail Gallery */}
         {allImages.length > 1 && (
-          <div className="grid grid-cols-5 gap-2">
+          <div ref={galleryRef} className="grid grid-cols-5 gap-2">
             {allImages.map((image, index) => (
               <button
                 key={index}
@@ -143,7 +228,7 @@ export default function ProductDetailView({ product }: { product: Product }) {
       </div>
 
       {/* Product Details */}
-      <div className="space-y-6">
+      <div ref={detailsRef} className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">{product.name}</h1>
           <p className="text-sm text-muted-foreground mt-1">Danh mục: {product.category_name}</p>
@@ -221,7 +306,13 @@ export default function ProductDetailView({ product }: { product: Product }) {
           </TabsContent>
         </Tabs>
 
-        <Button onClick={handleAddToCart} className="w-full" size="lg" disabled={!isInStock}>
+        <Button 
+          ref={addToCartBtnRef}
+          onClick={handleAddToCart} 
+          className="w-full" 
+          size="lg" 
+          disabled={!isInStock}
+        >
           {isInStock ? "Thêm vào giỏ hàng" : "Hết hàng"}
         </Button>
       </div>

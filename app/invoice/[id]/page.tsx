@@ -66,8 +66,8 @@ const translateOrderStatus = (status: string) => {
 }
 
 export default function InvoicePage() {
-  const params = useParams()
-  const orderId = params.id as string
+  const params = useParams();
+  const orderId = params?.id as string || "";
   
   const { user, isAuthenticated, token } = useAuth()
   const router = useRouter()

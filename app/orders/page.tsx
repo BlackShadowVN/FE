@@ -1,15 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { format } from "date-fns"
 import { useAuth } from "@/components/auth-provider"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
 import { 
   User, 
@@ -20,7 +23,10 @@ import {
   CheckCircle, 
   XCircle,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Filter,
+  ArrowLeft
 } from "lucide-react"
 
 interface Order {
@@ -64,8 +70,108 @@ export default function OrdersPage() {
   const { user, isAuthenticated, token } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { gsap } = useGSAP()
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [activeFilter, setActiveFilter] = useState("all")
+  const [searchTerm, setSearchTerm] = useState("")
+
+  // Refs for animation
+  const headerRef = useRef<HTMLDivElement>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
+  const ordersListRef = useRef<HTMLDivElement>(null)
+
+  // Animations for UI components
+  useIsomorphicLayoutEffect(() => {
+    if (!isAuthenticated) return;
+    
+    // Kiểm tra nếu đang trên thiết bị di động để tối ưu hiệu suất
+    const isMobile = window.innerWidth < 768;
+    
+    // Giảm stagger và duration trên mobile để tối ưu hiệu suất
+    const staggerTime = isMobile ? 0.03 : 0.05;
+    const animDuration = isMobile ? 0.3 : 0.4;
+    
+    // Timeline for animations
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        defaults: {
+          ease: "power2.out",
+          duration: animDuration,
+          clearProps: "transform" // Giải phóng bộ nhớ sau khi animation hoàn thành
+        }
+      });
+      
+      // Header animation
+      if (headerRef.current) {
+        tl.fromTo(
+          headerRef.current,
+          { y: -20, opacity: 0 },
+          { y: 0, opacity: 1 }
+        );
+      }
+      
+      // Filter animation
+      if (filterRef.current) {
+        tl.fromTo(
+          filterRef.current,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1 },
+          "-=0.2"
+        );
+      }
+      
+      // Orders list animation
+      if (!isLoading && ordersListRef.current) {
+        const orderItems = ordersListRef.current.querySelectorAll('.order-item');
+        tl.fromTo(
+          orderItems,
+          { y: 20, opacity: 0 },
+          { 
+            y: 0, 
+            opacity: 1, 
+            stagger: staggerTime,
+            clearProps: "transform"
+          },
+          "-=0.2"
+        );
+      }
+    });
+    
+    // Cleanup function
+    return () => ctx.revert();
+  }, [isAuthenticated, isLoading, gsap]);
+
+  // Animate when filter changes
+  useEffect(() => {
+    if (!isAuthenticated || isLoading) return;
+
+    const ctx = gsap.context(() => {
+      if (ordersListRef.current) {
+        const orderItems = ordersListRef.current.querySelectorAll('.order-item');
+        
+        // Kiểm tra nếu đang trên thiết bị di động để tối ưu hiệu suất
+        const isMobile = window.innerWidth < 768;
+        const staggerTime = isMobile ? 0.02 : 0.04;
+        const animDuration = isMobile ? 0.25 : 0.35;
+        
+        gsap.fromTo(
+          orderItems,
+          { y: 10, opacity: 0.6 },
+          { 
+            y: 0, 
+            opacity: 1, 
+            duration: animDuration,
+            stagger: staggerTime,
+            ease: "power2.out",
+            clearProps: "transform"
+          }
+        );
+      }
+    });
+    
+    return () => ctx.revert();
+  }, [activeFilter, searchTerm, orders, isAuthenticated, isLoading, gsap]);
 
   // Chuyển hướng nếu chưa đăng nhập
   useEffect(() => {
@@ -80,10 +186,13 @@ export default function OrdersPage() {
       if (!user || !token) return
 
       try {
+        setIsLoading(true)
         // Tạo URL với query params
         const url = new URL(`https://thanhbinhnguyen.id.vn/restful/orders`);
         url.searchParams.append('user_id', user.id.toString());
         url.searchParams.append('limit', '50');
+        url.searchParams.append('order_by', 'created_at');
+        url.searchParams.append('sort', 'desc');
 
         const response = await fetch(url.toString(), {
           headers: {
@@ -170,20 +279,104 @@ export default function OrdersPage() {
     }
   }
 
+  // Lọc đơn hàng
+  const getFilteredOrders = () => {
+    // Đầu tiên, lọc theo trạng thái
+    let filteredOrders = orders;
+    if (activeFilter !== "all") {
+      filteredOrders = orders.filter(order => order.status === activeFilter);
+    }
+    
+    // Sau đó, lọc theo từ khóa tìm kiếm
+    if (searchTerm.trim() !== "") {
+      const searchLower = searchTerm.toLowerCase();
+      filteredOrders = filteredOrders.filter(order => 
+        order.order_code.toLowerCase().includes(searchLower) ||
+        order.shipping_address.toLowerCase().includes(searchLower) ||
+        order.id.toString().includes(searchLower)
+      );
+    }
+    
+    return filteredOrders;
+  }
+
   if (!isAuthenticated) {
     return null // Sẽ chuyển hướng bởi useEffect
   }
 
+  const filteredOrders = getFilteredOrders();
+
   return (
-    <div className="container py-10">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Đơn hàng của tôi</h1>
-        <Button variant="outline" onClick={() => router.push("/profile")}>
-          <User className="mr-2 h-4 w-4" />
-          Quay lại trang cá nhân
-        </Button>
+    <div className="container py-8">
+      {/* Page header */}
+      <div ref={headerRef} className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div>
+            <h1 className="text-3xl font-bold mb-1">Đơn hàng của bạn</h1>
+            <p className="text-muted-foreground">
+              Xem và quản lý tất cả đơn hàng của bạn
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => router.push("/profile")} className="mt-3 sm:mt-0 self-start sm:self-auto">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Quay lại trang cá nhân
+          </Button>
+        </div>
+        <Separator className="my-4" />
       </div>
       
+      {/* Filter and Search */}
+      <div ref={filterRef} className="mb-6 space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="relative w-full sm:w-auto flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              type="search" 
+              placeholder="Tìm kiếm đơn hàng..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+            <Button 
+              variant={activeFilter === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveFilter("all")}
+              className="flex-1 sm:flex-none"
+            >
+              Tất cả
+            </Button>
+            <Button 
+              variant={activeFilter === "pending" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveFilter("pending")}
+              className="flex-1 sm:flex-none"
+            >
+              Đang chờ
+            </Button>
+            <Button 
+              variant={activeFilter === "processing" || activeFilter === "shipping" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveFilter("processing")}
+              className="flex-1 sm:flex-none"
+            >
+              Đang xử lý
+            </Button>
+            <Button 
+              variant={activeFilter === "completed" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveFilter("completed")}
+              className="flex-1 sm:flex-none"
+            >
+              Hoàn thành
+            </Button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Orders list */}
       <div className="space-y-6">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-10">
@@ -203,10 +396,21 @@ export default function OrdersPage() {
               </Button>
             </CardContent>
           </Card>
+        ) : filteredOrders.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+              <Search className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">Không tìm thấy đơn hàng</h3>
+              <p className="text-muted-foreground mb-4">Không có đơn hàng nào phù hợp với bộ lọc hiện tại</p>
+              <Button variant="outline" onClick={() => {setActiveFilter("all"); setSearchTerm("")}}>
+                Xóa bộ lọc
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-4">
-            {orders.map(order => (
-              <Card key={order.id}>
+          <div ref={ordersListRef} className="space-y-4">
+            {filteredOrders.map(order => (
+              <Card key={order.id} className="order-item hover:shadow-sm transition-shadow">
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div>
@@ -248,12 +452,13 @@ export default function OrdersPage() {
                             cancelOrder(order.id)
                           }
                         }}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                       >
                         <XCircle className="mr-2 h-4 w-4" />
                         Hủy đơn
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" asChild>
+                    <Button size="sm" asChild>
                       <Link href={`/orders/${order.id}`}>
                         Chi tiết
                         <ChevronRight className="ml-2 h-4 w-4" />

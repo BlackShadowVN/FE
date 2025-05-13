@@ -75,9 +75,9 @@ const getStatusBadgeVariant = (status: string) => {
 }
 
 export default function OrderDetailPage() {
-  // Lấy param id từ URL với useParams của Next.js
-  const params = useParams()
-  const orderId = params.id as string
+  // Sử dụng useParams() thay vì use(params)
+  const params = useParams();
+  const orderId = params?.id as string || "";
   
   const { user, isAuthenticated, token } = useAuth()
   const router = useRouter()

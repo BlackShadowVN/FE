@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef, useCallback, startTransition } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +16,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, Search } from "lucide-react"
+import { ChevronDown, Search, ShoppingCart } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
+import { Checkbox } from "@/components/ui/checkbox"
+import { AddToCartButton } from "@/components/add-to-cart-button"
+import { FadeInView, BatchFadeIn } from "@/components/animation"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 
 interface SearchParams {
   category?: string
@@ -532,7 +538,7 @@ export default function ProductsPage() {
   return (
     <Suspense fallback={<ProductsPageLoading />}>
       <ProductsPageClient />
-    </Suspense>
+            </Suspense>
   );
 }
 
@@ -559,4 +565,347 @@ function ProductsPageLoading() {
       </div>
     </div>
   );
+}
+
+function ProductCard({ product }: { product: any }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const { gsap } = useGSAP();
+  
+  // Hover animation cho card
+  useIsomorphicLayoutEffect(() => {
+    if (!cardRef.current) return;
+    
+    const card = cardRef.current;
+    const image = card.querySelector('.product-image');
+    
+    card.addEventListener('mouseenter', () => {
+      gsap.to(card, {
+        y: -5,
+        duration: 0.3,
+        ease: 'power1.out',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+      });
+      
+      if (image) {
+        gsap.to(image, {
+          scale: 1.05,
+          duration: 0.4,
+          ease: 'power1.out'
+        });
+      }
+    });
+    
+    card.addEventListener('mouseleave', () => {
+      gsap.to(card, {
+        y: 0,
+        duration: 0.3,
+        ease: 'power1.out',
+        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
+      });
+      
+      if (image) {
+        gsap.to(image, {
+          scale: 1,
+          duration: 0.4,
+          ease: 'power1.out'
+        });
+      }
+    });
+  }, [gsap]);
+
+  return (
+    <Card ref={cardRef} className="h-full hover:shadow-md transition-all">
+      <CardHeader className="p-0">
+        <div className="relative h-48 w-full overflow-hidden">
+          <Image
+            src={product.main_image || "/placeholder.svg"}
+            alt={product.name}
+            fill
+            className="object-cover rounded-t-lg product-image"
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="p-4">
+        <CardTitle className="text-lg line-clamp-1">{product.name}</CardTitle>
+        <p className="text-primary font-bold mt-2">
+          {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
+            Number.parseFloat(product.base_price),
+          )}
+        </p>
+      </CardContent>
+      <CardFooter className="p-4 pt-0 flex flex-col space-y-2">
+        <Link href={`/products/${product.id}`} className="w-full">
+          <Button variant="outline" className="w-full">
+            Xem chi tiết
+          </Button>
+        </Link>
+        <Button
+          onClick={() => {}} // Placeholder
+          className="w-full"
+          variant="default"
+        >
+          Thêm vào giỏ hàng
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+}
+
+function Products({ 
+  products = [], 
+  totalPages = 1, 
+  categories = [] 
+}: { 
+  products: any[]; 
+  totalPages: number; 
+  categories: any[] 
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { gsap } = useGSAP();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState<number[]>([0, 20000000]);
+  const [sortOrder, setSortOrder] = useState<string>("name_asc");
+  const [page, setPage] = useState<number>(1);
+
+  // Animation cho danh sách sản phẩm
+  useIsomorphicLayoutEffect(() => {
+    if (!containerRef.current) return;
+    
+    const container = containerRef.current;
+    const title = container.querySelector('h1');
+    const filtersTitle = container.querySelector('.filters-title');
+    const filterItems = container.querySelectorAll('.filter-item');
+    
+    // Timeline cho animation
+    const tl = gsap.timeline();
+    
+    // Animation cho tiêu đề
+    if (title) {
+      tl.fromTo(
+        title,
+        { y: -30, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+    
+    // Animation cho phần tiêu đề filter
+    if (filtersTitle) {
+      tl.fromTo(
+        filtersTitle,
+        { y: -20, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.4, ease: 'power2.out' },
+        "-=0.3"
+      );
+    }
+    
+    // Animation cho các filter item
+    if (filterItems.length) {
+      tl.fromTo(
+        filterItems,
+        { y: 20, opacity: 0 },
+        { y: 0, opacity: 1, stagger: 0.05, duration: 0.4, ease: 'power2.out' },
+        "-=0.2"
+      );
+    }
+  }, [gsap]);
+
+  // Khởi tạo state từ URL
+  useEffect(() => {
+    if (!searchParams) return;
+    
+    const query = searchParams.get("query") || "";
+    const cats = searchParams.get("categories")?.split(",") || [];
+    const minPrice = Number(searchParams.get("minPrice") || 0);
+    const maxPrice = Number(searchParams.get("maxPrice") || 20000000);
+    const sort = searchParams.get("sort") || "name_asc";
+    const currentPage = Number(searchParams.get("page") || 1);
+
+    setSearchQuery(query);
+    setSelectedCategories(cats);
+    setPriceRange([minPrice, maxPrice]);
+    setSortOrder(sort);
+    setPage(currentPage);
+  }, [searchParams]);
+
+  // Thay đổi URL khi áp dụng bộ lọc
+  const applyFilters = useCallback(() => {
+    const params = new URLSearchParams();
+    
+    if (searchQuery) params.set("query", searchQuery);
+    if (selectedCategories.length > 0) params.set("categories", selectedCategories.join(","));
+    if (priceRange[0] > 0) params.set("minPrice", priceRange[0].toString());
+    if (priceRange[1] < 20000000) params.set("maxPrice", priceRange[1].toString());
+    if (sortOrder) params.set("sort", sortOrder);
+    params.set("page", "1");
+
+    router.push(`/products?${params.toString()}`);
+  }, [searchQuery, selectedCategories, priceRange, sortOrder, router]);
+
+  // Reset bộ lọc
+  const resetFilters = useCallback(() => {
+    setSearchQuery("");
+    setSelectedCategories([]);
+    setPriceRange([0, 20000000]);
+    setSortOrder("name_asc");
+    router.push("/products");
+  }, [router]);
+
+  // Đổi trang
+  const changePage = useCallback((newPage: number) => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.set("page", newPage.toString());
+    router.push(`/products?${params.toString()}`);
+  }, [router, searchParams]);
+
+  return (
+    <div ref={containerRef} className="container px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Sản phẩm</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-medium mb-4 filters-title">Lọc sản phẩm</h2>
+            <div className="space-y-4">
+              <div className="filter-item">
+                <h3 className="text-sm font-medium mb-3">Danh mục</h3>
+                <div className="space-y-2">
+                  {categories.map((category) => (
+                    <div key={category.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`category-${category.id}`}
+                        checked={selectedCategories.includes(category.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedCategories([...selectedCategories, category.id])
+                          } else {
+                            setSelectedCategories(selectedCategories.filter((id) => id !== category.id))
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`category-${category.id}`}
+                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        {category.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-item">
+                <h3 className="text-sm font-medium mb-3">Giá</h3>
+                <div className="space-y-4">
+                  <Slider
+                    defaultValue={[priceRange[0], priceRange[1]]}
+                    min={0}
+                    max={20000000}
+                    step={100000}
+                    value={[priceRange[0], priceRange[1]]}
+                    onValueChange={(value) => setPriceRange([value[0], value[1]])}
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">
+                      {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(priceRange[0])}
+                    </span>
+                    <span className="text-sm">
+                      {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(priceRange[1])}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="filter-item">
+                <h3 className="text-sm font-medium mb-3">Sắp xếp theo</h3>
+                <Select value={sortOrder} onValueChange={setSortOrder}>
+              <SelectTrigger>
+                    <SelectValue placeholder="Chọn thứ tự sắp xếp" />
+              </SelectTrigger>
+              <SelectContent>
+                    <SelectItem value="name_asc">Tên (A-Z)</SelectItem>
+                    <SelectItem value="name_desc">Tên (Z-A)</SelectItem>
+                    <SelectItem value="price_asc">Giá (Thấp - Cao)</SelectItem>
+                    <SelectItem value="price_desc">Giá (Cao - Thấp)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+              <Button className="w-full filter-item" onClick={applyFilters}>
+                Áp dụng bộ lọc
+                </Button>
+              </div>
+          </div>
+        </div>
+
+        <div className="md:col-span-3">
+          <div className="mb-6 grid grid-cols-1 gap-2">
+            <div className="flex items-center space-x-2">
+              <Input
+                placeholder="Tìm kiếm sản phẩm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1"
+              />
+              <Button onClick={applyFilters}>Tìm kiếm</Button>
+            </div>
+          </div>
+
+          {products.length > 0 ? (
+            <BatchFadeIn 
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+              stagger={0.05}
+              duration={0.5}
+              distance={20}
+              direction="up"
+            >
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </BatchFadeIn>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-lg text-muted-foreground">Không tìm thấy sản phẩm nào phù hợp với bộ lọc.</p>
+              <Button className="mt-4" variant="outline" onClick={resetFilters}>
+                Xóa bộ lọc
+              </Button>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="mt-6 flex justify-center">
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => changePage(page - 1)}
+                  disabled={page === 1}
+                >
+                  Trước
+                </Button>
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <Button
+                    key={i}
+                    variant={page === i + 1 ? "default" : "outline"}
+                    onClick={() => changePage(i + 1)}
+                  >
+                    {i + 1}
+                  </Button>
+                ))}
+                <Button
+                  variant="outline"
+                  onClick={() => changePage(page + 1)}
+                  disabled={page === totalPages}
+                >
+                  Sau
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

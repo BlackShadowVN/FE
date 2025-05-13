@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useGSAP } from "@/components/gsap-provider"
+import { useIsomorphicLayoutEffect } from "@/hooks/use-isomorphic-layout-effect"
 
 interface Banner {
   id: string
@@ -18,9 +20,18 @@ interface Banner {
 
 export function BannerCarousel({ banners }: { banners: Banner[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textRefs = useRef<Array<HTMLDivElement | null>>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { gsap } = useGSAP();
+  
+  // Kiểm tra nếu đang ở thiết bị di động
+  const isMobile = useRef(false);
+  useEffect(() => {
+    isMobile.current = window.innerWidth < 768;
+  }, []);
   
   // Auto scroll every 5 seconds
   useEffect(() => {
@@ -51,7 +62,10 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
       }
     };
     
-    startAutoScroll();
+    // Chỉ bắt đầu auto scroll sau khi trang đã tải xong
+    if (isInitialized) {
+      startAutoScroll();
+    }
     
     // Pause auto scroll when user interacts with the carousel
     const container = containerRef.current;
@@ -70,8 +84,72 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     return () => {
       stopAutoScroll();
     };
-  }, [activeIndex, banners.length]);
+  }, [activeIndex, banners.length, isInitialized]);
   
+  // GSAP animations for banner text content - tối ưu hiệu suất
+  useIsomorphicLayoutEffect(() => {
+    if (banners.length <= 0) return;
+    setIsInitialized(true);
+    
+    // Bỏ qua animation phức tạp trên thiết bị di động
+    if (isMobile.current) {
+      // Chỉ đặt tất cả các phần tử về trạng thái hiển thị ngay lập tức
+      banners.forEach((_, index) => {
+        const textContent = textRefs.current[index];
+        if (textContent) {
+          gsap.set([
+            textContent.querySelector('.banner-badge'),
+            textContent.querySelector('.banner-title'),
+            textContent.querySelector('.banner-date')
+          ], {
+            opacity: 1,
+            y: 0
+          });
+        }
+      });
+      return;
+    }
+    
+    // Animate text content for current banner with performance optimization
+    const textContent = textRefs.current[activeIndex];
+    if (textContent) {
+      // Reset opacity and position for animation
+      gsap.set([
+        textContent.querySelector('.banner-badge'),
+        textContent.querySelector('.banner-title'),
+        textContent.querySelector('.banner-date')
+      ], { 
+        opacity: 0, 
+        y: 20,
+        overwrite: true // Tránh xung đột animation
+      });
+      
+      // Create animation timeline - sử dụng single timeline thay vì nhiều animation
+      const tl = gsap.timeline({
+        defaults: {
+          ease: "power3.out",
+          overwrite: true, // Tránh xung đột animation
+        }
+      });
+      
+      tl.to(textContent.querySelector('.banner-badge'), {
+        opacity: 1,
+        y: 0,
+        duration: 0.4, // Giảm thời gian
+      })
+      .to(textContent.querySelector('.banner-title'), {
+        opacity: 1,
+        y: 0,
+        duration: 0.5, // Giảm thời gian
+      }, "-=0.2") // Giảm overlap
+      .to(textContent.querySelector('.banner-date'), {
+        opacity: 1,
+        y: 0,
+        duration: 0.4, // Giảm thời gian
+      }, "-=0.3"); // Giảm overlap
+    }
+  }, [activeIndex, banners.length, gsap]);
+
   // Scroll to the next slide
   const nextSlide = () => {
     if (banners.length <= 1) return;
@@ -102,9 +180,12 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     }
   };
   
-  // Handle scroll event to update active index
+  // Handle scroll event to update active index - thêm throttle để tránh quá nhiều lần gọi
   const handleScroll = () => {
     if (!scrollRef.current) return;
+    
+    // Không cập nhật nếu đang scroll bởi code
+    if (scrollRef.current.scrollLeft % scrollRef.current.offsetWidth !== 0) return;
     
     const scrollPosition = scrollRef.current.scrollLeft;
     const slideWidth = scrollRef.current.offsetWidth;
@@ -146,15 +227,18 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
                 priority={index === 0}
               />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/70 flex flex-col justify-end">
-                <div className="p-6 md:p-8 lg:p-10 text-white">
+                <div 
+                  className="p-6 md:p-8 lg:p-10 text-white"
+                  ref={(el) => { textRefs.current[index] = el; }}
+                >
                   <div className="max-w-3xl">
-                    <div className="bg-primary/80 inline-block px-3 py-1 rounded-full text-sm font-medium mb-3">
+                    <div className="bg-primary/80 inline-block px-3 py-1 rounded-full text-sm font-medium mb-3 banner-badge">
                       Banner #{index + 1}
                     </div>
-                    <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 drop-shadow-md">
+                    <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 drop-shadow-md banner-title">
                       {banner.title}
                     </h2>
-                    <p className="text-sm md:text-base opacity-90 drop-shadow-md">
+                    <p className="text-sm md:text-base opacity-90 drop-shadow-md banner-date">
                       Cập nhật: {new Date(banner.updated_at).toLocaleDateString('vi-VN')}
                     </p>
                   </div>
@@ -215,4 +299,4 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
       )}
     </div>
   )
-} 
+}
