@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowRight } from "lucide-react"
+import { BannerCarousel } from "./components/BannerCarousel"
 
 // Fallback data for when the API fails
 const FALLBACK_CATEGORIES = [
@@ -42,7 +43,7 @@ async function getBanners() {
     // Use the correct API URL with https
     const res = await fetch("https://thanhbinhnguyen.id.vn/restful/banners", {
       // Chỉ sử dụng một cách revalidate để tránh lỗi khi build
-      next: { revalidate: 3600 }, // Tự động cập nhật sau 1 giờ
+      next: { revalidate: 1 }, // Tự động cập nhật sau 1s
       // Add headers to help with CORS issues
       headers: {
         Accept: "application/json",
@@ -184,32 +185,6 @@ function CategorySkeleton() {
   )
 }
 
-function BannerCarousel({ banners }: { banners: any[] }) {
-  if (!banners.length) {
-    return (
-      <div className="relative w-full h-[300px] md:h-[400px] lg:h-[500px] rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-        <p className="text-muted-foreground">Không có banner</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="relative w-full h-[300px] md:h-[400px] lg:h-[500px] rounded-lg overflow-hidden">
-      {banners.map((banner, index) => (
-        <Link key={banner.id} href={banner.link || "#"} className={index === 0 ? "block" : "hidden"}>
-          <Image
-            src={banner.image || "/placeholder.svg"}
-            alt={banner.title || "Banner"}
-            fill
-            className="object-cover"
-            priority={index === 0}
-          />
-        </Link>
-      ))}
-    </div>
-  )
-}
-
 function FeaturedProducts({ products }: { products: any[] }) {
   if (!products.length) {
     return (
@@ -283,59 +258,99 @@ function CategoryGrid({ categories }: { categories: any[] }) {
   )
 }
 
+// Tách riêng các async components ra ngoài
+async function BannerSection() {
+  const banners = await getBanners()
+  return <BannerCarousel banners={banners} />
+}
+
+async function CategoriesSection() {
+  const categories = await getCategories()
+  return (
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
+        <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
+          Xem tất cả <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+      <CategoryGrid categories={categories} />
+    </>
+  )
+}
+
+async function FeaturedProductsSection() {
+  const products = await getFeaturedProducts()
+  return (
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold">Sản phẩm nổi bật</h2>
+        <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
+          Xem tất cả <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+      <FeaturedProducts products={products} />
+    </>
+  )
+}
+
 export default function Home() {
   return (
     <div className="container py-8 space-y-12">
       {/* Banner Section */}
       <section>
         <Suspense fallback={<BannerSkeleton />}>
-          <BannerCarouselLoader />
+          <BannerSection />
         </Suspense>
       </section>
 
       {/* Categories Section */}
       <section>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
-          <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-            Xem tất cả <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
         <Suspense
           fallback={
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {Array(6)
-                .fill(0)
-                .map((_, i) => (
-                  <CategorySkeleton key={i} />
-                ))}
-            </div>
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Danh mục sản phẩm</h2>
+                <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
+                  Xem tất cả <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {Array(6)
+                  .fill(0)
+                  .map((_, i) => (
+                    <CategorySkeleton key={i} />
+                  ))}
+              </div>
+            </>
           }
         >
-          <CategoryGridLoader />
+          <CategoriesSection />
         </Suspense>
       </section>
 
       {/* Featured Products Section */}
       <section>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Sản phẩm nổi bật</h2>
-          <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
-            Xem tất cả <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
         <Suspense
           fallback={
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {Array(8)
-                .fill(0)
-                .map((_, i) => (
-                  <ProductSkeleton key={i} />
-                ))}
-            </div>
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Sản phẩm nổi bật</h2>
+                <Link href="/products" className="text-primary flex items-center gap-1 hover:underline">
+                  Xem tất cả <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {Array(8)
+                  .fill(0)
+                  .map((_, i) => (
+                    <ProductSkeleton key={i} />
+                  ))}
+              </div>
+            </>
           }
         >
-          <FeaturedProductsLoader />
+          <FeaturedProductsSection />
         </Suspense>
       </section>
 
@@ -358,19 +373,4 @@ export default function Home() {
       </section>
     </div>
   )
-}
-
-async function BannerCarouselLoader() {
-  const banners = await getBanners()
-  return <BannerCarousel banners={banners} />
-}
-
-async function CategoryGridLoader() {
-  const categories = await getCategories()
-  return <CategoryGrid categories={categories} />
-}
-
-async function FeaturedProductsLoader() {
-  const products = await getFeaturedProducts()
-  return <FeaturedProducts products={products} />
 }
